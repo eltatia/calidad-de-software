@@ -1,0 +1,13 @@
+﻿/vendor/
+/node_modules/
+/.env
+.env.*
+/writable/*
+!writable/index.html
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+public/uploads/*
+*.sql
