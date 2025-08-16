@@ -1,0 +1,39 @@
+﻿name: CI
+
+on:
+  push: { branches: [ "main" ] }
+  pull_request: { branches: [ "main" ] }
+
+jobs:
+  qa-php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: mbstring, intl, curl, dom, json, gd, mysqli
+          coverage: none
+
+      - name: Install Composer deps (if composer.json)
+        run: |
+          if [ -f composer.json ]; then composer install --no-interaction --no-progress; fi
+
+      - name: PHPStan (if installed)
+        run: |
+          if [ -x vendor/bin/phpstan ]; then vendor/bin/phpstan analyse --level=max app; else echo "PHPStan not installed"; fi
+
+      - name: PHPCS (if installed)
+        run: |
+          if [ -x vendor/bin/phpcs ]; then vendor/bin/phpcs --standard=PSR12 app; else echo "PHPCS not installed"; fi
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Composer audit
+        run: |
+          if [ -f composer.json ]; then composer install --no-interaction --no-progress && composer audit || true; fi
+      - name: NPM audit (if package.json)
+        run: |
+          if [ -f package.json ]; then npm ci --omit=dev && npm audit --omit=dev || true; fi

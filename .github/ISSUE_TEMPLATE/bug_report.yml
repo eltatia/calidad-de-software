@@ -1,0 +1,19 @@
+﻿name: Reporte de bug
+description: Defecto en desarrollo/producción
+labels: [bug, S3-medio]
+body:
+  - type: input
+    id: modulo
+    attributes: { label: Módulo, placeholder: Prestamos/Búsqueda/... }
+  - type: textarea
+    id: steps
+    attributes: { label: Pasos para reproducir }
+  - type: textarea
+    id: expected
+    attributes: { label: Resultado esperado }
+  - type: textarea
+    id: actual
+    attributes: { label: Resultado obtenido }
+  - type: input
+    id: version
+    attributes: { label: Versión/Tag }
