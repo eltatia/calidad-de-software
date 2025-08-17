@@ -1,0 +1,84 @@
+
+name: Security Baseline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  zap-baseline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 1) Preparar PHP y servir la app en localhost:8080
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, intl, curl, dom, json, pdo, pdo_mysql
+          coverage: none
+
+      - name: Install composer deps (si aplica)
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-interaction --no-progress
+          fi
+
+      - name: Start PHP built-in server
+        run: |
+          # Ajusta el docroot si usas CI3/CI4. Para este repo, el index.php está en la raíz.
+          php -S 127.0.0.1:8080 -t . >/tmp/php-server.log 2>&1 &
+          # Espera a que levante
+          for i in {1..30}; do
+            curl -sSf http://127.0.0.1:8080 >/dev/null && break
+            sleep 1
+          done
+
+      # 2) ZAP Baseline (objetivo: 0 "High"; "Medium" con issue/mitigación)
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.11.0
+        with:
+          target: 'http://127.0.0.1:8080'
+          cmd_options: >-
+            -a        # incluye scan de AJAX spider si procede
+            -m 3      # spider por 3 minutos (ajústalo según tu app)
+            -I        # ignora warnings informativos
+          fail_action: true          # hace fallar el job si hay FAILs
+          allow_issue_warnings: true # crea/actualiza issue con hallazgos
+          issue_title: 'ZAP Baseline Findings'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Archive ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: report.html
+
+      # 3) Check de cabeceras de seguridad
+      - name: Security headers check (CSP, HSTS, cookies)
+        shell: bash
+        run: |
+          set -e
+          URL="http://127.0.0.1:8080"
+          headers=$(curl -sSI "$URL")
+          echo "$headers"
+
+          require() { echo "$headers" | grep -qi "^$1:" || { echo "Falta header $1"; exit 1; }; }
+
+          # Exigir HSTS solo si sirves por HTTPS en prod; en CI puede omitirse.
+          # require "Strict-Transport-Security"
+
+          require "Content-Security-Policy"
+          require "X-Content-Type-Options"
+          require "X-Frame-Options"
+          require "Referrer-Policy"
+          # Cookies seguras (si hay cookies)
+          echo "$headers" | grep -qi "Set-Cookie" && \
+            (echo "$headers" | grep -qi "HttpOnly" && echo "$headers" | grep -qi "Secure" && echo "$headers" | grep -qi "SameSite") \
+            || echo "No se detectaron cookies o faltan flags recomendados (HttpOnly/Secure/SameSite)"
+
